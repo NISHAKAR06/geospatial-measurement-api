@@ -3,7 +3,9 @@ import math
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+from shapely import make_valid
 from shapely.geometry.base import BaseGeometry
+
 
 
 def format_crs_string(crs) -> str:
@@ -83,10 +85,12 @@ def calculate_measurement(geometry: BaseGeometry | None) -> dict | None:
         }
 
     if not geometry.is_valid:
-        # Attempt minimal repair if feasible, or mark invalid
+        # Attempt repair using Shapely's make_valid()
         try:
-            geometry = geometry.buffer(0)
-            if not geometry.is_valid:
+            repaired = make_valid(geometry)
+            if repaired is not None and repaired.is_valid and not repaired.is_empty:
+                geometry = repaired
+            else:
                 return {
                     "type": None,
                     "value": None,

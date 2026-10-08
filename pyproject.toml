@@ -1,9 +1,9 @@
 [project]
 name = "geospatial-measurement-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "FastAPI service for processing KML and Shapefile data, CRS-aware geospatial measurements, and PostGIS persistence."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.14.0",
     "fastapi>=0.142.2",

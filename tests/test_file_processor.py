@@ -1,4 +1,3 @@
-import tempfile
 import zipfile
 from pathlib import Path
 import pytest
@@ -58,12 +57,19 @@ def test_process_incomplete_shapefile(tmp_path: Path):
         process_file(str(zip_path))
 
 
-def test_process_zip_path_traversal_attack(tmp_path: Path):
+@pytest.mark.parametrize(
+    "malicious_filename",
+    [
+        "../evil.shp",
+        "../../evil.shp",
+        "/absolute/path.shp",
+        "\\absolute\\path.shp",
+        "nested/../../evil.shp",
+    ],
+)
+def test_process_zip_path_traversal_attacks(tmp_path: Path, malicious_filename: str):
     zip_path = tmp_path / "malicious.zip"
     with zipfile.ZipFile(zip_path, "w") as zf:
-        zf.writestr("../evil.shp", b"evil content")
-        zf.writestr("../evil.shx", b"evil content")
-        zf.writestr("../evil.dbf", b"evil content")
+        zf.writestr(malicious_filename, b"malicious content")
     with pytest.raises(ValueError, match="Insecure ZIP archive: path traversal detected"):
         process_file(str(zip_path))
-
