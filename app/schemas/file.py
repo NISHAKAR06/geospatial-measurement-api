@@ -19,6 +19,7 @@ class FeatureMeasurementResponse(BaseModel):
 
     feature_id: int
     geometry_type: Optional[str] = None
+    geometry: Optional[Dict[str, Any]] = None
     measurement: Optional[MeasurementDetail] = None
     properties: Dict[str, Any] = Field(default_factory=dict)
 
@@ -39,5 +40,6 @@ class MeasurementListResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     file_id: UUID
+    original_crs: Optional[str] = None
+    measurement_crs: Optional[str] = None
     measurements: List[FeatureMeasurementResponse]
-

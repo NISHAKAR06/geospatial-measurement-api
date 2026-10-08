@@ -49,7 +49,6 @@ def test_post_unsupported_file(client: TestClient):
 
 
 def test_post_file_too_large(client: TestClient, monkeypatch: pytest.MonkeyPatch):
-    # Set limit to 0 MB (effective < 1KB threshold) to test 413
     monkeypatch.setattr(settings, "MAX_UPLOAD_SIZE_MB", 0)
     oversized_data = b"A" * 1024
     response = client.post(
@@ -61,7 +60,6 @@ def test_post_file_too_large(client: TestClient, monkeypatch: pytest.MonkeyPatch
 
 
 def test_get_file_details(client: TestClient):
-    # Upload first
     kml_path = Path("sample_data/sample.kml")
     with open(kml_path, "rb") as f:
         upload_resp = client.post(
@@ -70,7 +68,6 @@ def test_get_file_details(client: TestClient):
         )
     file_id = upload_resp.json()["id"]
 
-    # Retrieve file
     response = client.get(f"/api/files/{file_id}/")
     assert response.status_code == 200
     data = response.json()
@@ -87,8 +84,7 @@ def test_get_file_details_not_found(client: TestClient):
     assert f"File with ID '{random_id}' was not found." in response.json()["detail"]
 
 
-def test_get_file_measurements(client: TestClient):
-    # Upload first
+def test_get_file_measurements_kml(client: TestClient):
     kml_path = Path("sample_data/sample.kml")
     with open(kml_path, "rb") as f:
         upload_resp = client.post(
@@ -97,29 +93,65 @@ def test_get_file_measurements(client: TestClient):
         )
     file_id = upload_resp.json()["id"]
 
-    # Retrieve measurements
     response = client.get(f"/api/files/{file_id}/measurements/")
     assert response.status_code == 200
     data = response.json()
     assert data["file_id"] == file_id
+    assert data["original_crs"] == "EPSG:4326"
+    assert data["measurement_crs"].startswith("EPSG:326")
+
     measurements = data["measurements"]
     assert len(measurements) == 3
 
-    # Point: measurement should be null
+    # Point: measurement is null, but GeoJSON geometry exists
     assert measurements[0]["geometry_type"] == "Point"
     assert measurements[0]["measurement"] is None
+    assert measurements[0]["geometry"] is not None
+    assert measurements[0]["geometry"]["type"] == "Point"
+    assert len(measurements[0]["geometry"]["coordinates"]) == 2
 
-    # LineString: length
+    # LineString: length in meters, GeoJSON geometry exists
     assert measurements[1]["geometry_type"] == "LineString"
     assert measurements[1]["measurement"]["type"] == "length"
     assert measurements[1]["measurement"]["value"] > 0
     assert measurements[1]["measurement"]["unit"] == "m"
+    assert measurements[1]["geometry"] is not None
+    assert measurements[1]["geometry"]["type"] == "LineString"
+    assert len(measurements[1]["geometry"]["coordinates"]) >= 2
 
-    # Polygon: area
+    # Polygon: area in m², GeoJSON geometry exists
     assert measurements[2]["geometry_type"] == "Polygon"
     assert measurements[2]["measurement"]["type"] == "area"
     assert measurements[2]["measurement"]["value"] > 0
     assert measurements[2]["measurement"]["unit"] == "m²"
+    assert measurements[2]["geometry"] is not None
+    assert measurements[2]["geometry"]["type"] == "Polygon"
+    assert len(measurements[2]["geometry"]["coordinates"]) >= 1
+
+
+def test_get_file_measurements_shapefile(client: TestClient):
+    zip_path = Path("sample_data/sample_shapefile.zip")
+    with open(zip_path, "rb") as f:
+        upload_resp = client.post(
+            "/api/files/",
+            files={"file": ("sample_shapefile.zip", f, "application/zip")},
+        )
+    file_id = upload_resp.json()["id"]
+
+    response = client.get(f"/api/files/{file_id}/measurements/")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["file_id"] == file_id
+    assert data["original_crs"] == "EPSG:4326"
+    assert data["measurement_crs"].startswith("EPSG:326")
+
+    measurements = data["measurements"]
+    assert len(measurements) == 3
+    for feat in measurements:
+        assert feat["geometry_type"] == "Polygon"
+        assert feat["measurement"]["type"] == "area"
+        assert feat["measurement"]["value"] > 0
+        assert feat["geometry"]["type"] == "Polygon"
 
 
 def test_get_file_measurements_not_found(client: TestClient):

@@ -5,13 +5,13 @@
 </p>
 
 <p align="center">
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12"></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115%2B-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI"></a>
   <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/badge/Packaging-uv-DE5FE9?style=flat-square&logo=astral&logoColor=white" alt="uv"></a>
   <a href="https://geopandas.org/"><img src="https://img.shields.io/badge/Geospatial-GeoPandas%20%7C%20Shapely%20%7C%20PyProj-2C5E3B?style=flat-square" alt="Geospatial"></a>
   <a href="https://postgis.net/"><img src="https://img.shields.io/badge/Database-PostgreSQL%20%2F%20PostGIS-336791?style=flat-square&logo=postgresql&logoColor=white" alt="PostGIS"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Status-Assignment%20Ready-blue?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/Status-Production%20Ready-blue?style=flat-square" alt="Status">
 </p>
 
 <p align="center">
@@ -33,11 +33,11 @@
 Geographic datasets arrive in varying vector file formats, fragmented coordinate systems, and unprojected angular coordinate frames. The **Geospatial Measurement API** is an automated backend service designed to solve these challenges through robust validation, intelligent coordinate transformations, and metric geometric calculations:
 
 - **KML Support** (`.kml`): Parses Placemarks into vector features, attributes, and geometries.
-- **Shapefile ZIP Support** (`.zip`): Ingests zipped ESRI Shapefiles (`.shp`, `.shx`, `.dbf`, `.prj`) with strict security protections against path traversal (Zip Slip) and resource exhaustion attacks.
-- **Feature Extraction**: Extracts discrete geometric features, their primitive types (`Point`, `LineString`, `Polygon`, `MultiPoint`, `MultiLineString`, `MultiPolygon`), and associated attribute properties.
-- **CRS Handling**: Accurately detects source Coordinate Reference Systems (CRS) and dynamically reprojects geographic coordinates into optimal metric projected systems.
-- **Measurement Calculation**: Computes polygon areas ($m^2$) and line lengths ($m$) in standardized metric units while gracefully ignoring non-dimensional point entities.
-- **PostgreSQL / PostGIS Persistence**: Stores file metadata, non-spatial attribute dictionaries as `JSONB`, and spatial vector geometries in standard WGS84 PostGIS columns.
+- **Shapefile ZIP Support** (`.zip`): Ingests zipped ESRI Shapefiles (`.shp`, `.shx`, `.dbf`, `.prj`) with strict security protections against path traversal (Zip Slip) and resource exhaustion attacks. Shapefiles without CRS metadata (`.prj`) are rejected because reliable metric area and length calculations require a known Coordinate Reference System.
+- **Feature Extraction**: Extracts discrete geometric features, their primitive types (`Point`, `LineString`, `Polygon`, `MultiPoint`, `MultiLineString`, `MultiPolygon`), GeoJSON representations, and associated attribute properties.
+- **CRS Handling**: Accurately detects source Coordinate Reference Systems (CRS) and dynamically reprojects geographic coordinates into optimal metric projected systems before measuring.
+- **Measurement Calculation**: Computes polygon areas ($m^2$) and line lengths ($m$) in standardized metric units while gracefully handling non-dimensional point entities.
+- **PostgreSQL / PostGIS Persistence**: Stores file metadata, non-spatial attribute dictionaries as `JSONB`, and spatial vector geometries in standard WGS84 PostGIS columns with GIST spatial indexing.
 
 ---
 
@@ -59,12 +59,13 @@ FastAPI (app/api/files.py)
   ├───► Measurement Service (app/services/measurement.py)
   │       • Source CRS Inspection
   │       • Dynamic UTM Reprojection (PyProj)
-  │       • Vector Geometric Measurements (Shapely)
+  │       • Vector Geometric Measurements & Repair (Shapely)
+  │       • GeoJSON Geometry Serialization
   │
   └───► Persistence Service (app/services/persistence.py)
           • Transaction Management
           • PostGIS Spatial Serialization (GeoAlchemy2)
-          • JSONB Attribute Storage
+          • GIST Spatial Indexing & JSONB Attribute Storage
           │
           ▼
 PostgreSQL + PostGIS (Docker / Relational Database)
@@ -116,11 +117,11 @@ Geographic Coordinate Reference Systems such as **WGS 84 (`EPSG:4326`)** express
 ### Dynamic Projection Workflow
 The service transforms geographic coordinates into a suitable local projected CRS before measurement, allowing area and distance calculations to be returned in metric units while minimizing local projection distortion.
 
-1. **Inspection**: Verify that `gdf.crs` is present. If missing, the file is rejected with a meaningful validation error.
+1. **Inspection**: Verify that `gdf.crs` is present. If missing, the file is rejected with a meaningful validation error. Shapefiles require a `.prj` component to resolve their CRS.
 2. **Classification**: Check `gdf.crs.is_geographic`. If the dataset is already projected (e.g. State Plane, custom UTM), coordinates are already metric and preserved.
 3. **Estimation**: For geographic datasets (`EPSG:4326`), calculate the bounding centroid and estimate the local **Universal Transverse Mercator (UTM)** zone using `gdf.estimate_utm_crs()`.
 4. **Reprojection**: Execute `gdf.to_crs(projected_crs)` prior to executing `geometry.length` or `geometry.area`.
-5. **Auditing**: Both `original_crs` and `measurement_crs` are persisted in the database for reproducibility and auditing.
+5. **Auditing**: Both `original_crs` and `measurement_crs` are recorded and returned for auditability and reproducibility.
 
 **Projection Scope & Trade-offs:**
 - Universal Transverse Mercator (UTM) provides a conformal Cartesian system designed for local and regional zones ($6^\circ$ longitude strips). Within its designated zone, scale distortion is minimal (typically $< 0.1\%$).
@@ -133,8 +134,8 @@ The service transforms geographic coordinates into a suitable local projected CR
 
 | Geometry Type | Measurement Extracted | Output Unit | Behavior |
 |:---|:---:|:---:|:---|
-| **Point** | *None* | `null` | Position recorded; no dimension calculated |
-| **MultiPoint** | *None* | `null` | Position recorded; no dimension calculated |
+| **Point** | *None* | `null` | Position recorded as GeoJSON; no dimension calculated |
+| **MultiPoint** | *None* | `null` | Positions recorded as GeoJSON; no dimension calculated |
 | **LineString** | **Length** | Meters ($m$) | Metric distance along segment vertices |
 | **MultiLineString** | **Length** | Meters ($m$) | Aggregated sum of all segment lengths |
 | **Polygon** | **Area** | Square meters ($m^2$) | Surface area of exterior ring minus interior holes |
@@ -246,10 +247,16 @@ curl -X GET "http://localhost:8000/api/files/e229e06d-e462-4b2a-a99f-7232e0e4708
 ```json
 {
   "file_id": "e229e06d-e462-4b2a-a99f-7232e0e4708d",
+  "original_crs": "EPSG:4326",
+  "measurement_crs": "EPSG:32643",
   "measurements": [
     {
       "feature_id": 0,
       "geometry_type": "Point",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [77.5946, 12.9716]
+      },
       "measurement": null,
       "properties": {
         "Name": "Survey Point"
@@ -258,6 +265,14 @@ curl -X GET "http://localhost:8000/api/files/e229e06d-e462-4b2a-a99f-7232e0e4708
     {
       "feature_id": 1,
       "geometry_type": "LineString",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [77.5946, 12.9716],
+          [77.596, 12.973],
+          [77.598, 12.9745]
+        ]
+      },
       "measurement": {
         "type": "length",
         "value": 490.39,
@@ -271,6 +286,18 @@ curl -X GET "http://localhost:8000/api/files/e229e06d-e462-4b2a-a99f-7232e0e4708
     {
       "feature_id": 2,
       "geometry_type": "Polygon",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [77.5946, 12.9716],
+            [77.6, 12.9716],
+            [77.6, 12.976],
+            [77.5946, 12.976],
+            [77.5946, 12.9716]
+          ]
+        ]
+      },
       "measurement": {
         "type": "area",
         "value": 285522.44,
@@ -350,9 +377,35 @@ The application is now live at **`http://localhost:8000`**.
 
 ---
 
+## Docker Deployment Workflow
+
+To build and run both PostGIS and the API container via Docker Compose:
+
+1. **Start the database container**:
+   ```bash
+   docker compose up -d db
+   ```
+
+2. **Execute Alembic migrations using the API container**:
+   ```bash
+   docker compose run --rm api alembic upgrade head
+   ```
+
+3. **Start the API service**:
+   ```bash
+   docker compose up -d api
+   ```
+
+4. **Verify container health**:
+   ```bash
+   docker compose ps
+   ```
+
+---
+
 ## Testing
 
-The project includes an automated test suite covering file processing, security constraints (Zip Slip protection), measurement logic, CRS transformations, and REST API contracts.
+The project includes an automated test suite covering file processing, security constraints (Zip Slip protection), measurement logic, CRS transformations, GeoJSON serialization, and REST API contracts.
 
 Run all tests via `pytest`:
 
@@ -364,10 +417,10 @@ uv run pytest -v
 
 ## Design Decisions
 
-- **FastAPI**: Provides asynchronous endpoint handling, automatic OpenAPI/Swagger documentation, and high performance.
+- **FastAPI**: Provides asynchronous endpoint handling, automatic OpenAPI/Swagger documentation, and high concurrency.
 - **GeoPandas & Fiona**: Standardized spatial data abstraction providing reliable vector parsing for both KML and Shapefile formats.
 - **Shapely & PyProj**: Delivers robust 2D Cartesian spatial operations, `make_valid()` geometry repair, and geodetic coordinate transformations.
-- **PostgreSQL / PostGIS**: Relational storage with native spatial indexing (GIST) for spatial querying and persistence.
+- **PostgreSQL / PostGIS**: Relational storage with native spatial indexing (GIST `idx_features_geometry`) and a unique constraint on `(file_id, feature_index)`.
 - **UTM Estimation Strategy**: Uses `estimate_utm_crs()` based on centroid coordinates to dynamically select the exact 6-degree UTM zone, minimizing projection distortion.
 - **Temporary File Isolation & Security**: Uploaded files and Shapefile extractions are handled in isolated `NamedTemporaryFile` and `TemporaryDirectory` environments with guaranteed teardown.
 - **Zip Slip & Bomb Protection**: Archive inspection rejects path traversal sequences (`..`, leading slashes) and caps entries at 500 files and 200MB uncompressed size.

@@ -1,6 +1,6 @@
 import uuid
 from typing import TYPE_CHECKING, Any, Dict
-from sqlalchemy import Float, ForeignKey, Integer, LargeBinary, String, Uuid, JSON
+from sqlalchemy import Float, ForeignKey, Index, Integer, LargeBinary, String, UniqueConstraint, Uuid, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from geoalchemy2 import Geometry
@@ -13,6 +13,10 @@ if TYPE_CHECKING:
 
 class Feature(Base):
     __tablename__ = "features"
+    __table_args__ = (
+        UniqueConstraint("file_id", "feature_index", name="uq_features_file_id_feature_index"),
+        Index("idx_features_geometry", "geometry", postgresql_using="gist"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -39,11 +43,13 @@ class Feature(Base):
     # PostGIS geometry column storing spatial representation in WGS84 (EPSG:4326),
     # with LargeBinary variant for cross-dialect / in-memory testing.
     geometry = mapped_column(
-        Geometry(geometry_type="GEOMETRY", srid=4326, nullable=True).with_variant(
-            LargeBinary, "sqlite"
-        ),
+        Geometry(
+            geometry_type="GEOMETRY",
+            srid=4326,
+            nullable=True,
+            spatial_index=False,
+        ).with_variant(LargeBinary, "sqlite"),
         nullable=True,
     )
 
     file: Mapped["File"] = relationship("File", back_populates="features")
-

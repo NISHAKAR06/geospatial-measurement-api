@@ -13,6 +13,7 @@ from shapely.geometry import (
 from app.services.measurement import (
     calculate_measurement,
     calculate_measurements,
+    geometry_to_geojson,
     prepare_for_measurement,
 )
 
@@ -28,7 +29,6 @@ def test_calculate_measurement_multipoint():
 
 
 def test_calculate_measurement_linestring():
-    # 100-meter straight line in metric projection
     line = LineString([(0, 0), (100, 0)])
     res = calculate_measurement(line)
     assert res is not None
@@ -52,7 +52,6 @@ def test_calculate_measurement_multilinestring():
 
 
 def test_calculate_measurement_polygon():
-    # 100m x 100m square polygon = 10,000 m²
     poly = Polygon([(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)])
     res = calculate_measurement(poly)
     assert res is not None
@@ -93,6 +92,30 @@ def test_calculate_measurement_none_geometry():
     res = calculate_measurement(None)
     assert res is not None
     assert res["status"] == "INVALID_GEOMETRY"
+
+
+def test_calculate_measurement_invalid_geometry_repaired():
+    # Self-intersecting bowtie polygon (invalid)
+    bowtie = Polygon([(0, 0), (0, 2), (2, 0), (2, 2), (0, 0)])
+    assert not bowtie.is_valid
+    res = calculate_measurement(bowtie)
+    assert res is not None
+    # make_valid() repairs it into a valid MultiPolygon, so it calculates area
+    assert res["type"] == "area"
+    assert res["status"] == "OK"
+    assert res["value"] > 0
+
+
+def test_geometry_to_geojson():
+    p = Point(77.5946, 12.9716)
+    geojson = geometry_to_geojson(p)
+    assert geojson is not None
+    assert geojson["type"] == "Point"
+    assert geojson["coordinates"] == (77.5946, 12.9716)
+
+    # None and empty geometries
+    assert geometry_to_geojson(None) is None
+    assert geometry_to_geojson(Polygon()) is None
 
 
 def test_missing_crs_raises_error():
@@ -152,4 +175,3 @@ def test_calculate_measurements_batch():
     assert results[1]["measurement"]["value"] > 0
     assert results[2]["measurement"]["type"] == "area"
     assert results[2]["measurement"]["value"] > 0
-

@@ -66,13 +66,24 @@ def upgrade() -> None:
                 from_text="ST_GeomFromEWKT",
                 name="geometry",
                 nullable=True,
+                spatial_index=False,
             ),
             nullable=True,
         ),
+        sa.UniqueConstraint("file_id", "feature_index", name="uq_features_file_id_feature_index"),
+    )
+
+    # 4. Explicit GIST spatial index on features.geometry
+    op.create_index(
+        "idx_features_geometry",
+        "features",
+        ["geometry"],
+        unique=False,
+        postgresql_using="gist",
     )
 
 
 def downgrade() -> None:
+    op.drop_index("idx_features_geometry", table_name="features")
     op.drop_table("features")
     op.drop_table("files")
-

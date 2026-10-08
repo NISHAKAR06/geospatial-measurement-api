@@ -3,8 +3,33 @@ import math
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-from shapely import make_valid
+from shapely import make_valid, wkb
+from shapely.geometry import mapping
 from shapely.geometry.base import BaseGeometry
+from geoalchemy2.shape import to_shape
+
+
+def geometry_to_geojson(geom: Any) -> Dict[str, Any] | None:
+    """
+    Convert a PostGIS WKBElement, WKB binary, or Shapely geometry into a clean GeoJSON-compatible dictionary.
+    Safely returns None for missing or empty geometries.
+    """
+    if geom is None:
+        return None
+    try:
+        if isinstance(geom, BaseGeometry):
+            shapely_geom = geom
+        elif isinstance(geom, (bytes, bytearray)):
+            shapely_geom = wkb.loads(geom)
+        else:
+            shapely_geom = to_shape(geom)
+
+        if shapely_geom is None or shapely_geom.is_empty:
+            return None
+        return mapping(shapely_geom)
+    except Exception:
+        return None
+
 
 
 

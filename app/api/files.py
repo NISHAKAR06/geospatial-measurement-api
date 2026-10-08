@@ -18,13 +18,13 @@ from app.schemas.file import (
     MeasurementListResponse,
 )
 from app.services.file_processor import process_file
-from app.services.measurement import calculate_measurements
+from app.services.measurement import calculate_measurements, geometry_to_geojson
 from app.services.persistence import persist_processed_dataset
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/files",
+    prefix=f"{settings.API_V1_PREFIX}/files",
     tags=["Files"],
 )
 
@@ -153,7 +153,7 @@ def get_file_measurements(
     db: Session = Depends(get_db),
 ):
     """
-    Retrieve extracted features and computed spatial measurements for a file.
+    Retrieve extracted features, GeoJSON geometries, and computed spatial measurements for a file.
     """
     file_record = db.query(FileModel).filter(FileModel.id == id).first()
     if not file_record:
@@ -183,10 +183,14 @@ def get_file_measurements(
         elif feat.geometry_type in ("Point", "MultiPoint"):
             measurement_detail = None
 
+        # Convert stored spatial geometry into clean GeoJSON mapping
+        geojson_geom = geometry_to_geojson(feat.geometry)
+
         measurement_responses.append(
             FeatureMeasurementResponse(
                 feature_id=feat.feature_index,
                 geometry_type=feat.geometry_type,
+                geometry=geojson_geom,
                 measurement=measurement_detail,
                 properties=feat.properties or {},
             )
@@ -194,5 +198,7 @@ def get_file_measurements(
 
     return MeasurementListResponse(
         file_id=file_record.id,
+        original_crs=file_record.original_crs,
+        measurement_crs=file_record.measurement_crs,
         measurements=measurement_responses,
     )
