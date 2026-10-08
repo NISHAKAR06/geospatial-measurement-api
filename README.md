@@ -11,7 +11,7 @@
   <a href="https://geopandas.org/"><img src="https://img.shields.io/badge/Geospatial-GeoPandas%20%7C%20Shapely%20%7C%20PyProj-2C5E3B?style=flat-square" alt="Geospatial"></a>
   <a href="https://postgis.net/"><img src="https://img.shields.io/badge/Database-PostgreSQL%20%2F%20PostGIS-336791?style=flat-square&logo=postgresql&logoColor=white" alt="PostGIS"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Status-Production%20Ready-green?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/Status-Assignment%20Ready-blue?style=flat-square" alt="Status">
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@
 
 ## Overview
 
-Geographic datasets arrive in varying vector file formats, fragmented coordinate systems, and unprojected angular coordinate frames. The **Geospatial Measurement API** is an automated backend service designed to solve these challenges through robust validation, intelligent coordinate transformations, and precision geometric calculations:
+Geographic datasets arrive in varying vector file formats, fragmented coordinate systems, and unprojected angular coordinate frames. The **Geospatial Measurement API** is an automated backend service designed to solve these challenges through robust validation, intelligent coordinate transformations, and metric geometric calculations:
 
 - **KML Support** (`.kml`): Parses Placemarks into vector features, attributes, and geometries.
 - **Shapefile ZIP Support** (`.zip`): Ingests zipped ESRI Shapefiles (`.shp`, `.shx`, `.dbf`, `.prj`) with strict security protections against path traversal (Zip Slip) and resource exhaustion attacks.
@@ -113,13 +113,19 @@ Geographic Coordinate Reference Systems such as **WGS 84 (`EPSG:4326`)** express
 - **`set_crs()`**: Defines or overrides the CRS metadata without modifying the actual coordinate numbers. Using `set_crs()` on geographic data to treat it as projected corrupts the geometry because degrees are falsely interpreted as meters.
 - **`to_crs()`**: Applies rigorous mathematical cartographic transformations to project angular ellipsoidal coordinates into a Cartesian flat plane with true metric coordinates ($x, y$ in meters).
 
-### Dynamic UTM Estimation Workflow
-To achieve millimeter-precision measurements:
-1. **Inspection**: Verify that `gdf.crs` is present.
+### Dynamic Projection Workflow
+The service transforms geographic coordinates into a suitable local projected CRS before measurement, allowing area and distance calculations to be returned in metric units while minimizing local projection distortion.
+
+1. **Inspection**: Verify that `gdf.crs` is present. If missing, the file is rejected with a meaningful validation error.
 2. **Classification**: Check `gdf.crs.is_geographic`. If the dataset is already projected (e.g. State Plane, custom UTM), coordinates are already metric and preserved.
 3. **Estimation**: For geographic datasets (`EPSG:4326`), calculate the bounding centroid and estimate the local **Universal Transverse Mercator (UTM)** zone using `gdf.estimate_utm_crs()`.
 4. **Reprojection**: Execute `gdf.to_crs(projected_crs)` prior to executing `geometry.length` or `geometry.area`.
 5. **Auditing**: Both `original_crs` and `measurement_crs` are persisted in the database for reproducibility and auditing.
+
+**Projection Scope & Trade-offs:**
+- Universal Transverse Mercator (UTM) provides a conformal Cartesian system designed for local and regional zones ($6^\circ$ longitude strips). Within its designated zone, scale distortion is minimal (typically $< 0.1\%$).
+- For large continental datasets spanning multiple UTM zones, equal-area projections (such as Albers Equal Area) may be required to maintain consistent surface area metrics.
+- High-latitude/polar regions or datasets crossing the antimeridian require specialized polar stereographic or azimuthal projections.
 
 ---
 
@@ -285,7 +291,7 @@ curl -X GET "http://localhost:8000/api/files/e229e06d-e462-4b2a-a99f-7232e0e4708
 
 ### Prerequisites
 
-- **Python 3.12+**
+- **Python 3.12**
 - [**uv**](https://docs.astral-sh/uv/) (Fast Python package manager)
 - **Docker & Docker Compose** (for PostgreSQL / PostGIS)
 
@@ -308,8 +314,14 @@ uv sync
 
 Copy the example environment configuration:
 
+**Linux / macOS:**
 ```bash
 cp .env.example .env
+```
+
+**Windows (PowerShell):**
+```powershell
+Copy-Item .env.example .env
 ```
 
 ### 4. Start PostGIS Database Container
@@ -340,7 +352,7 @@ The application is now live at **`http://localhost:8000`**.
 
 ## Testing
 
-The project includes an extensive automated test suite covering file processing, security constraints (Zip Slip protection), measurement logic, CRS transformations, and REST API contracts.
+The project includes an automated test suite covering file processing, security constraints (Zip Slip protection), measurement logic, CRS transformations, and REST API contracts.
 
 Run all tests via `pytest`:
 
@@ -354,9 +366,9 @@ uv run pytest -v
 
 - **FastAPI**: Provides asynchronous endpoint handling, automatic OpenAPI/Swagger documentation, and high performance.
 - **GeoPandas & Fiona**: Standardized spatial data abstraction providing reliable vector parsing for both KML and Shapefile formats.
-- **Shapely & PyProj**: Delivers robust 2D Cartesian spatial operations and cartographic geodesic transformations.
+- **Shapely & PyProj**: Delivers robust 2D Cartesian spatial operations, `make_valid()` geometry repair, and geodetic coordinate transformations.
 - **PostgreSQL / PostGIS**: Relational storage with native spatial indexing (GIST) for spatial querying and persistence.
-- **UTM Estimation Strategy**: Uses `estimate_utm_crs()` based on centroid longitude/latitude to dynamically select the exact 6-degree UTM zone, ensuring minimal conformal distortion.
+- **UTM Estimation Strategy**: Uses `estimate_utm_crs()` based on centroid coordinates to dynamically select the exact 6-degree UTM zone, minimizing projection distortion.
 - **Temporary File Isolation & Security**: Uploaded files and Shapefile extractions are handled in isolated `NamedTemporaryFile` and `TemporaryDirectory` environments with guaranteed teardown.
 - **Zip Slip & Bomb Protection**: Archive inspection rejects path traversal sequences (`..`, leading slashes) and caps entries at 500 files and 200MB uncompressed size.
 - **JSONB Attribute Storage**: Non-spatial feature properties are dynamically mapped to PostgreSQL `JSONB`, accommodating arbitrary attribute columns without requiring hard-coded schema alterations.
