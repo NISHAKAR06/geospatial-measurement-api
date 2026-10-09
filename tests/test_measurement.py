@@ -14,6 +14,7 @@ from app.services.measurement import (
     calculate_measurement,
     calculate_measurements,
     geometry_to_geojson,
+    is_metric_crs,
     prepare_for_measurement,
 )
 
@@ -151,6 +152,64 @@ def test_already_projected_crs_preserved():
     assert orig_crs == "EPSG:32643"
     assert meas_crs == "EPSG:32643"
     assert meas_gdf.crs.to_epsg() == 32643
+
+
+def test_is_metric_crs():
+    import pyproj
+
+    assert is_metric_crs(pyproj.CRS("EPSG:32643")) is True  # UTM zone 43N (metres)
+    assert is_metric_crs(pyproj.CRS("EPSG:3857")) is True   # Web Mercator (metres)
+    assert is_metric_crs(pyproj.CRS("EPSG:2263")) is False  # State Plane NY (US survey feet)
+    assert is_metric_crs(pyproj.CRS("EPSG:2913")) is False  # State Plane OR (international feet)
+    assert is_metric_crs(pyproj.CRS("EPSG:4326")) is False  # Geographic (degrees)
+    assert is_metric_crs(None) is False
+
+
+def test_non_metre_projected_crs_transformed_to_metric():
+    # EPSG:2263 is NAD83 / New York Long Island (ftUS), which uses US survey feet
+    # 5,280 ftUS = 1 US survey mile = ~1609.344 meters
+    # A 1,000 ftUS x 1,000 ftUS polygon = 1,000,000 ftUS² = ~92,903 m²
+    line = LineString([(985000, 195000), (985000, 195000 + 5280)])
+    poly = Polygon([
+        (985000, 195000),
+        (986000, 195000),
+        (986000, 196000),
+        (985000, 196000),
+        (985000, 195000),
+    ])
+    gdf = gpd.GeoDataFrame(
+        {"name": ["Survey Line", "Survey Parcel"]},
+        geometry=[line, poly],
+        crs="EPSG:2263",
+    )
+
+    results, orig_crs, meas_crs = calculate_measurements(gdf)
+
+    # 1. Original CRS is preserved in original_crs
+    assert orig_crs == "EPSG:2263"
+
+    # 2. Measurement CRS is transformed to a metric CRS (e.g. UTM zone 18N / EPSG:32618)
+    assert meas_crs != "EPSG:2263"
+    assert meas_crs.startswith("EPSG:326")
+
+    # 3. Resulting measurement is reported in "m" for length
+    line_meas = results[0]["measurement"]
+    assert line_meas["type"] == "length"
+    assert line_meas["unit"] == "m"
+    assert line_meas["status"] == "OK"
+    # 5. Calculation does not simply treat feet as metres (5280 ft != 5280 m; ~1608.85 m)
+    assert 1600.0 < line_meas["value"] < 1620.0
+    assert line_meas["value"] != 5280.0
+
+    # 4. Area is reported in "m²"
+    poly_meas = results[1]["measurement"]
+    assert poly_meas["type"] == "area"
+    assert poly_meas["unit"] == "m²"
+    assert poly_meas["status"] == "OK"
+    # 5. 1,000,000 sq ft != 1,000,000 m²; ~92,845 m²
+    assert 90000.0 < poly_meas["value"] < 95000.0
+    assert poly_meas["value"] != 1000000.0
+
 
 
 def test_calculate_measurements_batch():

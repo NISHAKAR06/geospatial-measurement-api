@@ -41,3 +41,8 @@ class File(Base):
         order_by="Feature.feature_index",
     )
 
+    @property
+    def crs(self) -> str | None:
+        """Alias for original_crs for API schema compatibility."""
+        return self.original_crs
+

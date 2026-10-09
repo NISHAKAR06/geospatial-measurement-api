@@ -43,6 +43,25 @@ def format_crs_string(crs) -> str:
     return str(crs)
 
 
+def is_metric_crs(crs: Any) -> bool:
+    """
+    Check if a projected CRS uses metres as its linear coordinate unit.
+    Returns False for geographic CRSs (which use angular units) or projected
+    CRSs using non-metric units (e.g., US survey feet, international feet).
+    """
+    if crs is None:
+        return False
+    try:
+        if crs.is_geographic:
+            return False
+        axis_info = crs.axis_info
+        if not axis_info:
+            return False
+        return all(axis.unit_name.lower() in ("metre", "meter") for axis in axis_info)
+    except Exception:
+        return False
+
+
 def prepare_for_measurement(
     gdf: gpd.GeoDataFrame,
 ) -> Tuple[gpd.GeoDataFrame, str, str]:
@@ -53,6 +72,12 @@ def prepare_for_measurement(
     use angular units (degrees) that cannot be used for Euclidean metric
     measurements. When geographic CRS is detected, an optimal local UTM
     projected CRS is dynamically estimated and applied.
+
+    For projected Coordinate Reference Systems:
+    - If the coordinate system uses metric linear units (metres), the CRS is preserved.
+    - If the coordinate system uses non-metric linear units (e.g., US survey feet),
+      it is transformed to an optimal metric projected CRS (such as UTM) so all
+      calculations are strictly in metres and square metres.
 
     Returns:
         (measurement_gdf, original_crs_str, measurement_crs_str)
@@ -65,15 +90,16 @@ def prepare_for_measurement(
 
     original_crs_str = format_crs_string(gdf.crs)
 
-    if not gdf.crs.is_geographic:
-        # Already projected into metric units
+    if not gdf.crs.is_geographic and is_metric_crs(gdf.crs):
+        # Already projected into metric units (metres)
         return gdf, original_crs_str, original_crs_str
 
-    # Estimate appropriate local UTM CRS based on dataset bounds/centroid
+    # Geographic CRS (angular degrees) or non-metric projected CRS (e.g., feet).
+    # Estimate an optimal local UTM metric projected CRS based on dataset bounds/centroid.
     projected_crs = gdf.estimate_utm_crs()
 
     if projected_crs is None:
-        raise ValueError("Unable to determine a suitable projected CRS.")
+        raise ValueError("Unable to determine a suitable metric projected CRS.")
 
     measurement_gdf = gdf.to_crs(projected_crs)
     measurement_crs_str = format_crs_string(projected_crs)

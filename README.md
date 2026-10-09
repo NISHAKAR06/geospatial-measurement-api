@@ -11,7 +11,7 @@
   <a href="https://geopandas.org/"><img src="https://img.shields.io/badge/Geospatial-GeoPandas%20%7C%20Shapely%20%7C%20PyProj-2C5E3B?style=flat-square" alt="Geospatial"></a>
   <a href="https://postgis.net/"><img src="https://img.shields.io/badge/Database-PostgreSQL%20%2F%20PostGIS-336791?style=flat-square&logo=postgresql&logoColor=white" alt="PostGIS"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/Status-Production%20Ready-blue?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/Status-Assignment%20Ready-blue?style=flat-square" alt="Status">
 </p>
 
 <p align="center">
@@ -23,7 +23,8 @@
   <a href="#setup--local-development">Setup & Development</a> •
   <a href="#testing">Testing</a> •
   <a href="#design-decisions">Design Decisions</a> •
-  <a href="#future-improvements">Future Improvements</a>
+  <a href="#key-learnings">Key Learnings</a> •
+  <a href="#future-scope">Future Scope</a>
 </p>
 
 ---
@@ -115,13 +116,15 @@ Geographic Coordinate Reference Systems such as **WGS 84 (`EPSG:4326`)** express
 - **`to_crs()`**: Applies rigorous mathematical cartographic transformations to project angular ellipsoidal coordinates into a Cartesian flat plane with true metric coordinates ($x, y$ in meters).
 
 ### Dynamic Projection Workflow
-The service transforms geographic coordinates into a suitable local projected CRS before measurement, allowing area and distance calculations to be returned in metric units while minimizing local projection distortion.
+The service transforms coordinates into a suitable metric projected CRS before measurement, ensuring area and distance calculations are strictly performed on metric coordinates ($m, m^2$):
 
-1. **Inspection**: Verify that `gdf.crs` is present. If missing, the file is rejected with a meaningful validation error. Shapefiles require a `.prj` component to resolve their CRS.
-2. **Classification**: Check `gdf.crs.is_geographic`. If the dataset is already projected (e.g. State Plane, custom UTM), coordinates are already metric and preserved.
-3. **Estimation**: For geographic datasets (`EPSG:4326`), calculate the bounding centroid and estimate the local **Universal Transverse Mercator (UTM)** zone using `gdf.estimate_utm_crs()`.
-4. **Reprojection**: Execute `gdf.to_crs(projected_crs)` prior to executing `geometry.length` or `geometry.area`.
-5. **Auditing**: Both `original_crs` and `measurement_crs` are recorded and returned for auditability and reproducibility.
+1. **Inspection**: Verify that `gdf.crs` is present. If missing, the file is rejected with a validation error. Shapefiles require a `.prj` component to resolve their CRS.
+2. **Linear Unit Classification**:
+   - **Geographic CRS** (e.g. `EPSG:4326`): Coordinates are in angular degrees. The service estimates an optimal local **Universal Transverse Mercator (UTM)** metric zone via `gdf.estimate_utm_crs()` and reprojects coordinates into it.
+   - **Metric Projected CRS** (e.g. UTM, Web Mercator): The coordinate system's linear unit is already metric (metres). The CRS and coordinates are preserved without unnecessary transformation.
+   - **Non-Metric Projected CRS** (e.g. State Plane in US survey feet or international feet): Linear units are not metres. The service transforms coordinates into a suitable metric projected CRS (such as UTM) before measuring, preventing feet from being erroneously labeled as metres.
+3. **Measurement Invariance**: API measurements are always calculated on Cartesian metric coordinates and returned in meters ($m$) for length and square meters ($m^2$) for area.
+4. **Auditing**: Both `original_crs` and `measurement_crs` are recorded and returned for auditability and reproducibility.
 
 **Projection Scope & Trade-offs:**
 - Universal Transverse Mercator (UTM) provides a conformal Cartesian system designed for local and regional zones ($6^\circ$ longitude strips). Within its designated zone, scale distortion is minimal (typically $< 0.1\%$).
@@ -221,6 +224,7 @@ curl -X GET "http://localhost:8000/api/files/e229e06d-e462-4b2a-a99f-7232e0e4708
 {
   "id": "e229e06d-e462-4b2a-a99f-7232e0e4708d",
   "filename": "sample.kml",
+  "crs": "EPSG:4326",
   "original_crs": "EPSG:4326",
   "measurement_crs": "EPSG:32643",
   "feature_count": 3,
@@ -257,6 +261,7 @@ curl -X GET "http://localhost:8000/api/files/e229e06d-e462-4b2a-a99f-7232e0e4708
         "type": "Point",
         "coordinates": [77.5946, 12.9716]
       },
+      "crs": "EPSG:4326",
       "measurement": null,
       "properties": {
         "Name": "Survey Point"
@@ -428,13 +433,23 @@ uv run pytest -v
 
 ---
 
-## Future Improvements
+## Key Learnings
 
-- **Asynchronous / Background Task Ingestion**: Offloading multi-gigabyte spatial files to background queues with Redis or Celery.
-- **Extended Spatial Formats**: Ingestion support for **GeoJSON**, **GeoPackage** (`.gpkg`), and **FlatGeobuf**.
-- **Pagination & Spatial Filtering**: Support for bounding box (`bbox`) spatial filters and pagination across feature retrieval endpoints.
-- **Cloud Object Storage**: Direct storage of raw archives in Amazon S3 or Google Cloud Storage.
-- **Authentication & Rate Limiting**: API key or JWT-based access controls and request rate limiting.
+1. **Geospatial Coordinate Integrity**: Calculating distance and area directly on angular degrees (`EPSG:4326`) produces mathematically invalid results because degrees vary with latitude. Dynamically projecting into conformal Cartesian systems (such as local UTM zones) ensures mathematically sound Euclidean operations.
+2. **Linear Unit Variance in Projected CRSs**: Not all projected systems use SI meters; regional coordinate frames (such as US State Plane `EPSG:2263`) utilize US survey feet. Inspecting coordinate axis metadata (`axis_info`) guarantees coordinates are converted to metric frames before applying Euclidean formulas.
+3. **Defensive Archive Ingestion (Zip Slip)**: Unzipping user-submitted Shapefile archives requires strict path traversal defense (rejecting `..`, absolute paths, and excessive entry counts) to protect the host operating system from file overwrites.
+4. **Automated Topology Healing**: Real-world aerial geometries frequently feature self-intersections or bowtie loops. Using GEOS-backed `shapely.make_valid()` provides automated topological repair without corrupting spatial features.
+5. **Dual Spatial Indexing**: Combining relational composite constraints `(file_id, feature_index)` with PostGIS GIST spatial indexing (`idx_features_geometry`) ensures high performance across both relational lookups and bounding-box spatial filters.
+
+---
+
+## Future Scope
+
+- **Asynchronous / Background Task Ingestion**: Offloading multi-gigabyte spatial files and raster orthomosaics to background queues using Celery and Redis.
+- **Extended Spatial Formats**: Ingestion support for **GeoPackage** (`.gpkg`), **FlatGeobuf**, and Cloud-Optimized GeoTIFFs (COG).
+- **Spatial Filtering & Bounding Box Queries**: Exposing spatial query endpoints (e.g. `GET /api/features?bbox=...` or spatial intersects) utilizing the underlying PostGIS GIST index.
+- **Cloud Object Storage**: Direct presigned upload integration with Amazon S3 or Google Cloud Storage for large archive processing.
+- **Authentication & Rate Limiting**: Production API key or OAuth2/JWT access controls with token bucket rate limiting.
 
 ---
 

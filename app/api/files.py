@@ -191,6 +191,7 @@ def get_file_measurements(
                 feature_id=feat.feature_index,
                 geometry_type=feat.geometry_type,
                 geometry=geojson_geom,
+                crs=file_record.original_crs,
                 measurement=measurement_detail,
                 properties=feat.properties or {},
             )

@@ -1,6 +1,7 @@
 import uuid
 from typing import Any, Dict, List
 import geopandas as gpd
+from shapely import force_2d
 from sqlalchemy.orm import Session
 from geoalchemy2.shape import from_shape
 
@@ -51,6 +52,8 @@ def persist_processed_dataset(
             postgis_geom = None
             if geom is not None and not geom.is_empty:
                 try:
+                    if getattr(geom, "has_z", False):
+                        geom = force_2d(geom)
                     if is_sqlite:
                         postgis_geom = geom.wkb
                     else:

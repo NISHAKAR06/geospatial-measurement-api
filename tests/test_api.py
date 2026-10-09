@@ -74,6 +74,8 @@ def test_get_file_details(client: TestClient):
     assert data["id"] == file_id
     assert data["filename"] == "sample.kml"
     assert data["feature_count"] == 3
+    assert data["crs"] == "EPSG:4326"
+    assert data["original_crs"] == "EPSG:4326"
     assert data["status"] == "COMPLETED"
 
 
@@ -103,8 +105,9 @@ def test_get_file_measurements_kml(client: TestClient):
     measurements = data["measurements"]
     assert len(measurements) == 3
 
-    # Point: measurement is null, but GeoJSON geometry exists
+    # Point: measurement is null, but GeoJSON geometry and crs exist
     assert measurements[0]["geometry_type"] == "Point"
+    assert measurements[0]["crs"] == "EPSG:4326"
     assert measurements[0]["measurement"] is None
     assert measurements[0]["geometry"] is not None
     assert measurements[0]["geometry"]["type"] == "Point"

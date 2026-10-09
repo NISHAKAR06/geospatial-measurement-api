@@ -20,6 +20,7 @@ class FeatureMeasurementResponse(BaseModel):
     feature_id: int
     geometry_type: Optional[str] = None
     geometry: Optional[Dict[str, Any]] = None
+    crs: Optional[str] = None
     measurement: Optional[MeasurementDetail] = None
     properties: Dict[str, Any] = Field(default_factory=dict)
 
@@ -29,6 +30,7 @@ class FileResponse(BaseModel):
 
     id: UUID
     filename: str
+    crs: Optional[str] = None
     original_crs: Optional[str] = None
     measurement_crs: Optional[str] = None
     feature_count: int

@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Pavagada Solar Park Drone Aerial Inspection Survey</name>
+    <description>Production aerial photogrammetry survey dataset collected via RTK-enabled UAV.</description>
+
+    <!-- Ground Control Points (Points) -->
+    <Placemark>
+      <name>GCP-01-PRIMARY</name>
+      <description>Survey-grade RTK base station receiver benchmark</description>
+      <ExtendedData>
+        <Data name="target_type"><value>Checkerboard Target</value></Data>
+        <Data name="horizontal_accuracy_cm"><value>1.2</value></Data>
+        <Data name="elevation_msl_m"><value>624.50</value></Data>
+      </ExtendedData>
+      <Point>
+        <coordinates>77.275500,14.101200,624.5</coordinates>
+      </Point>
+    </Placemark>
+
+    <Placemark>
+      <name>GCP-02-PERIMETER</name>
+      <description>Secondary perimeter verification target</description>
+      <ExtendedData>
+        <Data name="target_type"><value>Crosshair AeroPoint</value></Data>
+        <Data name="horizontal_accuracy_cm"><value>1.5</value></Data>
+        <Data name="elevation_msl_m"><value>626.10</value></Data>
+      </ExtendedData>
+      <Point>
+        <coordinates>77.281000,14.106500,626.1</coordinates>
+      </Point>
+    </Placemark>
+
+    <!-- Linear Features (LineStrings) -->
+    <Placemark>
+      <name>Heavy Haul Access Road</name>
+      <description>Primary double-lane crushed gravel access corridor</description>
+      <ExtendedData>
+        <Data name="pavement_type"><value>Crushed Gravel</value></Data>
+        <Data name="design_speed_kph"><value>30</value></Data>
+      </ExtendedData>
+      <LineString>
+        <coordinates>
+          77.275000,14.100000,623.0
+          77.276200,14.102500,624.1
+          77.278500,14.105200,625.4
+          77.282000,14.107000,627.0
+          77.285000,14.108500,628.2
+        </coordinates>
+      </LineString>
+    </Placemark>
+
+    <Placemark>
+      <name>Drone Flight Mission - Strip 01</name>
+      <description>Automated serpentine aerial photogrammetry corridor</description>
+      <ExtendedData>
+        <Data name="altitude_agl_m"><value>120.0</value></Data>
+        <Data name="ground_sampling_dist_cm"><value>2.8</value></Data>
+        <Data name="speed_m_s"><value>12.5</value></Data>
+      </ExtendedData>
+      <LineString>
+        <coordinates>
+          77.275200,14.101000,744.5
+          77.275200,14.108000,744.5
+          77.276500,14.108000,744.5
+          77.276500,14.101000,744.5
+          77.277800,14.101000,744.5
+          77.277800,14.108000,744.5
+          77.279100,14.108000,744.5
+          77.279100,14.101000,744.5
+        </coordinates>
+      </LineString>
+    </Placemark>
+
+    <!-- Solar PV Array Block A (Standard Polygon) -->
+    <Placemark>
+      <name>Solar Array Block A - 50MW</name>
+      <description>Main photovoltaic tracker array block</description>
+      <ExtendedData>
+        <Data name="capacity_mw"><value>50.0</value></Data>
+        <Data name="module_count"><value>112000</value></Data>
+        <Data name="tilt_system"><value>Single-Axis Tracker</value></Data>
+      </ExtendedData>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              77.275500,14.101500,624.0
+              77.282500,14.101500,625.5
+              77.282500,14.107500,627.0
+              77.275500,14.107500,625.0
+              77.275500,14.101500,624.0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+
+    <!-- Solar PV Array Block B with Substation Exclusion Donut Hole -->
+    <Placemark>
+      <name>Solar Array Block B with Substation Exclusion</name>
+      <description>Array block containing an interior protected high-voltage step-up substation exclusion zone</description>
+      <ExtendedData>
+        <Data name="capacity_mw"><value>45.0</value></Data>
+        <Data name="has_donut_exclusion"><value>true</value></Data>
+      </ExtendedData>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              77.283500,14.101500,626.0
+              77.290500,14.101500,628.0
+              77.290500,14.107500,629.5
+              77.283500,14.107500,627.5
+              77.283500,14.101500,626.0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+        <innerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              77.286000,14.103500,627.0
+              77.288000,14.103500,627.5
+              77.288000,14.105500,628.0
+              77.286000,14.105500,627.5
+              77.286000,14.103500,627.0
+            </coordinates>
+          </LinearRing>
+        </innerBoundaryIs>
+      </Polygon>
+    </Placemark>
+
+  </Document>
+</kml>
